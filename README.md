@@ -7,7 +7,7 @@
 </p>
 
 # DataSet
-[Sample Dataset Download](https://drive.google.com/file/d/1mCOnqpUOal8SL2wWVfrcT6Pow0_NA2AW/view?usp=drive_link)
+[Sample Dataset Download](https://drive.google.com/file/d/1lD0OFIjZaGRGdmLnvj5zL8eUIzaza-2K/view?usp=drive_link)
 
 
 # How to use
@@ -27,8 +27,8 @@ python train.py
 
 # Test
 
-Adjust the parameters in the eval.py file to load the corresponding model. You can download our pretrained models [Medium(4,2).ckpt](https://drive.google.com/file/d/1jsD-0Jv2-ik5yU-QfcI00NI-K57Zqb-e/view?usp=sharing). Use the following command for testing.
+Adjust the parameters in the eval.py file to load the corresponding model. You can download our pretrained models [psnr=29.52.ckpt](https://drive.google.com/file/d/1mCOnqpUOal8SL2wWVfrcT6Pow0_NA2AW/view?usp=drive_link). Use the following command for testing.
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python train.py pl_DGLSNet ./config/default_kitti.yaml kitt_train --test
+python eval.py
 ```
