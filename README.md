@@ -6,4 +6,15 @@
 <img src="https://github.com/gentleman-zhong/nerf-lightning/assets/74064666/199a8054-5d84-474f-9fc4-c578e44aa804" width="400" alt="Looping GIF" loop>
 </p>
 
+# DataSet
+- [Sample Dataset Download](http://cseweb.ucsd.edu/~viscomp/projects/LF/papers/ECCV20/nerf/nerf_example_data.zip)
+
+
+# How to use
+## Using the Conda environment
+- `conda create -n nerf_lightning python=3.8` (Command Line Command)
+- `conda activate nerf_pl` (Command Line Command)
+
+## Configuring packages
+- `pip install -r requirements.txt` (Command Line Command)
 
