@@ -12,9 +12,9 @@
 
 # How to use
 ## Using the Conda environment
-- `conda create -n nerf_lightning python=3.8` (Command Line Command)
-- `conda activate nerf_pl` (Command Line Command)
+- `conda create -n nerf_lightning python=3.8` 
+- `conda activate nerf_lightning` 
 
 ## Configuring packages
-- `pip install -r requirements.txt` (Command Line Command)
+- `pip install -r requirements.txt` 
 
