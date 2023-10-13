@@ -7,7 +7,7 @@
 </p>
 
 # DataSet
-- [Sample Dataset Download](http://cseweb.ucsd.edu/~viscomp/projects/LF/papers/ECCV20/nerf/nerf_example_data.zip)
+[Sample Dataset Download](http://cseweb.ucsd.edu/~viscomp/projects/LF/papers/ECCV20/nerf/nerf_example_data.zip)
 
 
 # How to use
