@@ -119,7 +119,7 @@ class NeRFLightningModule(LightningModule):
         results = self(rays)
         loss = self.loss(results, rgbs)
         typ = 'fine' if 'rgb_fine' in results else 'coarse'
-
+        # 在第一个批次时，可视化模型的输出，包括预测的图像 (img)、GT 图像 (img_gt) 和深度图 (depth)。
         if batch_nb == 0:
             W, H = self.hparams.img_wh
             img = results[f'rgb_{typ}'].view(H, W, 3).permute(2, 0, 1).cpu()  # (3, H, W)

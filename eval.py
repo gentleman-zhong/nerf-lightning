@@ -79,7 +79,15 @@ def batched_inference(models, embeddings,
                         chunk,
                         dataset.white_back,
                         test_time=True)
+        # 返回的是这些信息
+        # results[f'weights_{typ}'] = weights
+        # results[f'opacity_{typ}'] = weights_sum
+        # results[f'z_vals_{typ}'] = z_vals
+        # results[f'rgb_{typ}'] = rgb_map
+        # results[f'depth_{typ}'] = depth_map
 
+
+        #下面这个步骤就是将结果从gpu转移到cpu，对上面返回的字典没有丝毫改变
         for k, v in rendered_ray_chunks.items():
             results[k] += [v.cpu()]
 
@@ -127,10 +135,11 @@ if __name__ == "__main__":
                                     args.N_samples, args.N_importance, args.use_disp,
                                     args.chunk)
         typ = 'fine' if 'rgb_fine' in results else 'coarse'
-
+        # 就是获取图像的颜色值
         img_pred = np.clip(results[f'rgb_{typ}'].view(h, w, 3).cpu().numpy(), 0, 1)
 
         if args.save_depth:
+            # 获取深度值
             depth_pred = results[f'depth_{typ}'].view(h, w).cpu().numpy()
             depth_maps += [depth_pred]
             if args.depth_format == 'pfm':
@@ -153,6 +162,7 @@ if __name__ == "__main__":
     if args.save_depth:
         min_depth = np.min(depth_maps)
         max_depth = np.max(depth_maps)
+        # 获取完深度的最大值最小值，然后进行归一化，有助于可视化深度信息
         depth_imgs = (depth_maps - np.min(depth_maps)) / (max(np.max(depth_maps) - np.min(depth_maps), 1e-8))
         depth_imgs_ = [cv2.applyColorMap((img * 255).astype(np.uint8), cv2.COLORMAP_JET) for img in depth_imgs]
         imageio.mimsave(os.path.join(dir_name, f'{args.scene_name}_depth.gif'), depth_imgs_, fps=30)

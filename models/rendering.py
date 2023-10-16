@@ -46,7 +46,7 @@ def sample_pdf(bins, weights, N_importance, det=False, eps=1e-5):
     samples = bins_g[...,0] + (u-cdf_g[...,0])/denom * (bins_g[...,1]-bins_g[...,0])
     return samples
 
-
+# 粗网络没有进行渲染，只是用来计算了权重，最终使用细网络进行渲染
 def render_rays(models,
                 embeddings,
                 rays,
@@ -109,6 +109,7 @@ def render_rays(models,
         if typ=='coarse' and test_time and 'fine' in models:
             for i in range(0, B, chunk):
                 xyz_embedded = embedding_xyz(xyz_[i:i+chunk])
+                # sigma_only=True只输出体积密度，所以out_chunks最后是每个点的体积密度
                 out_chunks += [model(xyz_embedded, sigma_only=True)]
 
             out = torch.cat(out_chunks, 0)
@@ -179,9 +180,9 @@ def render_rays(models,
         z_vals = near * (1-z_steps) + far * z_steps
     else: # use linear sampling in disparity space
         z_vals = 1/(1/near * (1-z_steps) + 1/far * z_steps)
-
+    # 改变数据形状
     z_vals = z_vals.expand(N_rays, N_samples)
-    
+    # 扰动因子
     if perturb > 0: # perturb sampling depths (z_vals)
         z_vals_mid = 0.5 * (z_vals[: ,:-1] + z_vals[: ,1:]) # (N_rays, N_samples-1) interval mid points
         # get intervals between samples
@@ -190,7 +191,7 @@ def render_rays(models,
         
         perturb_rand = perturb * torch.rand_like(z_vals)
         z_vals = lower + (upper - lower) * perturb_rand
-
+    # 采样点坐标
     xyz_coarse = rays_o + rays_d * rearrange(z_vals, 'n1 n2 -> n1 n2 1')
 
     results = {}

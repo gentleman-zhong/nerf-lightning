@@ -41,6 +41,7 @@ def read_pfm(filename):
 
 
 def save_pfm(filename, image, scale=1):
+    # scale是缩放因子
     file = open(filename, "wb")
     color = None
 
