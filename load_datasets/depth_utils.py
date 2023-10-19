@@ -1,6 +1,7 @@
 import numpy as np
 import re
 import sys
+import open3d as o3d
 
 def read_pfm(filename):
     file = open(filename, 'rb')
@@ -69,3 +70,52 @@ def save_pfm(filename, image, scale=1):
 
     image.tofile(file)
     file.close()
+
+
+def depth_image_to_point_cloud(rgb, depth, K, c2w, scale=1.0):
+    # scale缩放因子，K内参矩阵，c2w相机转世界
+    u = range(0, rgb.shape[1])
+    v = range(0, rgb.shape[0])
+
+    u, v = np.meshgrid(u, v)
+    u = u.astype(float)
+    v = v.astype(float)
+
+    Z = depth.astype(float) / scale
+    X = (u - K[0, 2]) * Z / K[0, 0]
+    Y = (v - K[1, 2]) * Z / K[1, 1]
+
+    X = np.ravel(X)
+    Y = np.ravel(Y)
+    Z = np.ravel(Z)
+
+    valid = Z > 0
+
+    X = X[valid]
+    Y = Y[valid]
+    Z = Z[valid]
+
+    position = np.vstack((X, Y, Z, np.ones(len(X))))
+    position = np.dot(c2w, position)
+
+    R = np.ravel(rgb[:, :, 0])[valid]
+    G = np.ravel(rgb[:, :, 1])[valid]
+    B = np.ravel(rgb[:, :, 2])[valid]
+
+    points = np.transpose(np.vstack((position[0:3, :], R, G, B)))
+
+
+
+    # 创建一个PointCloud对象
+    pcd = o3d.geometry.PointCloud()
+    # 去除了白色的点
+    non_white_points = points[~np.all(points[:, 3:6] == 1.0, axis=1)]
+    # 设置点云的坐标、颜色
+    pcd.points = o3d.utility.Vector3dVector(non_white_points[:, :3])
+    pcd.colors = o3d.utility.Vector3dVector(non_white_points[:, 3:6])  # 颜色通常在[0, 255]范围内，我的输出不在，需要归一化到[0, 1]
+
+    # 使用统计离群值去除滤波器,nb_neighbors 参数表示用于计算每个点周围邻域的点数越大滤波越厉害；std_ratio 参数表示标准差的倍数，越小滤波越厉害
+    cl, ind = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=1.0)
+    pcd = pcd.select_by_index(ind)
+
+    return pcd

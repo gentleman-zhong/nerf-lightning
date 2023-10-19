@@ -6,6 +6,7 @@ import os
 import json
 from path import Path
 from tqdm import tqdm
+import open3d as o3d
 
 
 def read_pfm(filename):
@@ -46,29 +47,7 @@ def read_pfm(filename):
     return data, scale
 
 
-def write_point_cloud(ply_filename, points):
-    formatted_points = []
-    for point in points:
-        formatted_points.append("%f %f %f %d %d %d 0\n" % (point[0], point[1], point[2], point[3], point[4], point[5]))
-
-    out_file = open(ply_filename, "w")
-    out_file.write('''ply
-    format ascii 1.0
-    element vertex %d
-    property float x
-    property float y
-    property float z
-    property uchar blue
-    property uchar green
-    property uchar red
-    property uchar alpha
-    end_header
-    %s
-    ''' % (len(points), "".join(formatted_points)))
-    out_file.close()
-
-
-def depth_image_to_point_cloud(rgb, depth, scale, K, c2w):
+def depth_image_to_point_cloud(rgb, depth, K, c2w, scale=1.0):
     # scale缩放因子，K内参矩阵，c2w相机转世界
     u = range(0, rgb.shape[1])
     v = range(0, rgb.shape[0])
@@ -97,75 +76,27 @@ def depth_image_to_point_cloud(rgb, depth, scale, K, c2w):
     R = np.ravel(rgb[:, :, 0])[valid]
     G = np.ravel(rgb[:, :, 1])[valid]
     B = np.ravel(rgb[:, :, 2])[valid]
-    # R = np.ravel(rgb[:, :, 0])
-    # G = np.ravel(rgb[:, :, 1])
-    # B = np.ravel(rgb[:, :, 2])
+
     points = np.transpose(np.vstack((position[0:3, :], R, G, B)))
 
-    return points
 
 
-def build_point_cloud(dataset_path, scale, view_ply_in_world_coordinate):
-    K = np.fromfile(os.path.join(dataset_path, "K.txt"), dtype=float, sep="\n ")
-    K = np.reshape(K, newshape=(3, 3))
-    image_files = sorted(Path(os.path.join(dataset_path, "images")).files('*.png'))
-    depth_files = sorted(Path(os.path.join(dataset_path, "depth_maps")).files('*.png'))
+    # 创建一个PointCloud对象
+    pcd = o3d.geometry.PointCloud()
+    # 去除了白色的点
+    non_white_points = points[~np.all(points[:, 3:6] == 255, axis=1)]
+    # 设置点云的坐标、颜色
+    pcd.points = o3d.utility.Vector3dVector(non_white_points[:, :3])
+    pcd.colors = o3d.utility.Vector3dVector(non_white_points[:, 3:6])  # 颜色通常在[0, 255]范围内，我的输出不在，需要归一化到[0, 1]
 
-    if view_ply_in_world_coordinate:
-        poses = np.fromfile(os.path.join(dataset_path, "poses.txt"), dtype=float, sep="\n ")
-        poses = np.reshape(poses, newshape=(-1, 4, 4))
-    else:
-        poses = np.eye(4)
+    # 使用统计离群值去除滤波器,nb_neighbors 参数表示用于计算每个点周围邻域的点数越大滤波越厉害；std_ratio 参数表示标准差的倍数，越小滤波越厉害
+    cl, ind = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=1.0)
+    pcd = pcd.select_by_index(ind)
 
-    for i in tqdm(range(0, len(image_files))):
-        image_file = image_files[i]
-        depth_file = depth_files[i]
-
-        rgb = cv2.imread(image_file)
-        depth = cv2.imread(depth_file, -1).astype(np.uint16)
-
-        if view_ply_in_world_coordinate:
-            current_points_3D = depth_image_to_point_cloud(rgb, depth, scale=scale, K=K, pose=poses[i])
-        else:
-            current_points_3D = depth_image_to_point_cloud(rgb, depth, scale=scale, K=K, pose=poses)
-        save_ply_name = os.path.basename(os.path.splitext(image_files[i])[0]) + ".ply"
-        save_ply_path = os.path.join(dataset_path, "point_clouds")
-
-        if not os.path.exists(save_ply_path):  # 判断是否存在文件夹如果不存在则创建为文件夹
-            os.mkdir(save_ply_path)
-        write_point_cloud(os.path.join(save_ply_path, save_ply_name), current_points_3D)
+    return pcd
 
 
-def draw_point_cloud(ax, points, title, axes=[0, 1, 2],point_size = 0.1, xlim3d=None, ylim3d=None, zlim3d=None):
-    axes_limits = [
-        [-20,80],
-        [-20,20],
-        [-3,3]
-    ]
-    axes_str = ['X','Y','Z']
-    ax.grid(False)  #不会画出网格
-    ax.scatter(*np.transpose(points[:, axes]), s=point_size, c=points[:, 3], cmap='gray')
-    ax.set_title(title)
-    ax.set_xlabel('{} axis'.format(axes_str[axes[0]]))
-    ax.set_ylabel('{} axis'.format(axes_str[axes[1]]))
-    if len(axes) > 2:
-        ax.set_xlim3d(*axes_limits[axes[0]])
-        ax.set_ylim3d(*axes_limits[axes[1]])
-        ax.set_zlim3d(*axes_limits[axes[2]])
-        ax.set_zlabel('{} axis'.format(axes_str[axes[2]]))
-    else:
-        ax.set_xlim(*axes_limits[axes[0]])
-        ax.set_ylim(*axes_limits[axes[1]])
-        # User specified limits
-    if xlim3d!=None:
-        ax.set_xlim3d(xlim3d)
-    if ylim3d!=None:
-        ax.set_ylim3d(ylim3d)
-    if zlim3d!=None:
-        ax.set_zlim3d(zlim3d)
-
-
-if __name__ == '__main__':
+def test_depth():
     # 获取图像和深度图
     depth_filename = './results/blender/test/depth_000.pfm'
     rgb_filename = './results/blender/test/000.png'
@@ -176,7 +107,7 @@ if __name__ == '__main__':
     depth_data, scale = read_pfm(depth_filename)
     H, W = image.shape[:2]
 
-    # 获取点云
+    # 获取相机内外参数
     with open(os.path.join(root_dir,
                            f"transforms_test.json"), 'r') as f:
         meta = json.load(f)
@@ -188,38 +119,29 @@ if __name__ == '__main__':
         [0, 0, 1]
     ])
     c2w = np.array(meta['frames'][0]['transform_matrix'])
-    points = depth_image_to_point_cloud(rgb=image_rgb, depth=depth_data, scale=scale, K=K, c2w=c2w)
 
-    # 创建一个画板
-    fig = plt.figure()
+    points_pcd = depth_image_to_point_cloud(rgb=image_rgb, depth=depth_data, scale=scale, K=K, c2w=c2w)
 
-    # 添加子图1：显示图像
-    ax1 = fig.add_subplot(131)
-    ax1.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    ax1.set_title('Image')
 
-    # 添加子图2：显示深度图
-    min_depth = np.min(depth_data)
-    max_depth = np.max(depth_data)
-    # 将深度图像归一化到 [0, 1]
-    normalized_depth = (depth_data - min_depth) / (max_depth - min_depth)
-    ax2 = fig.add_subplot(132)
-    ax2.imshow(normalized_depth,  cmap='viridis')
-    ax2.set_title('Depth Map')
+    # # 创建一个画板
+    # fig = plt.figure()
+    # # 添加子图2：显示深度图
+    # min_depth = np.min(depth_data)
+    # max_depth = np.max(depth_data)
+    # # 将深度图像归一化到 [0, 1]
+    # normalized_depth = (depth_data - min_depth) / (max_depth - min_depth)
+    # ax2 = fig.add_subplot(111)
+    # ax2.imshow(normalized_depth,  cmap='viridis')
+    # ax2.set_title('Depth Map')
+    # plt.show()
 
-    # 添加子图3：显示点云
-    ax3 = fig.add_subplot(133, projection='3d')
-    ax3.view_init(90, 90)  # 指定看的视角,俯仰角和方位角
-    # 筛选出非白色的点
-    non_white_points = points[~np.all(points[:, 3:6] == 255, axis=1)]
-    # 绘制非白色的点云
-    ax3.scatter(non_white_points[:, 0], non_white_points[:, 1], non_white_points[:, 2],
-                c=non_white_points[:, 3:6] / 255.0)
-    # ax3.scatter(points[:, 0], points[:, 1], points[:, 2],
-    #             c=points[:, 3:6] / 255.0)
-    ax3.set_title('Point Cloud')
+    o3d.visualization.draw_geometries([points_pcd])
 
-    plt.show()
+if __name__ == '__main__':
+    ply_file_path = "./results/blender/test/point_cloud_004.ply"
+    point_cloud = o3d.io.read_point_cloud(ply_file_path)
+    o3d.visualization.draw_geometries([point_cloud])
+
 
 
 

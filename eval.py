@@ -15,7 +15,7 @@ from load_datasets import dataset_dict
 from load_datasets.depth_utils import *
 
 torch.backends.cudnn.benchmark = True
-
+import json
 
 def get_opts():
     parser = ArgumentParser()
@@ -55,6 +55,9 @@ def get_opts():
     parser.add_argument('--depth_format', type=str, default='pfm',
                         choices=['pfm', 'bytes'],
                         help='which format to save')
+
+    parser.add_argument('--save_point_cloud', default=True, action="store_true",
+                        help='whether to save point cloud')
 
     return parser.parse_args()
 
@@ -147,6 +150,23 @@ if __name__ == "__main__":
             else:
                 with open(os.path.join(dir_name, f'depth_{i:03d}'), 'wb') as f:
                     f.write(depth_pred.tobytes())
+
+        if args.save_point_cloud:
+            # 获取相机内外参数
+            with open(os.path.join(args.root_dir,
+                                   f"transforms_{args.split}.json"), 'r') as f:
+                meta = json.load(f)
+            focal = 0.5 * w / np.tan(0.5 * meta['camera_angle_x'])  # original focal length
+            K = np.array([
+                [focal, 0, 0.5 * w],
+                [0, focal, 0.5 * h],
+                [0, 0, 1]
+            ])
+            c2w = np.array(meta['frames'][0]['transform_matrix'])
+            depth_pred = results[f'depth_{typ}'].view(h, w).cpu().numpy()
+            points_pcd = depth_image_to_point_cloud(rgb=img_pred, depth=depth_pred, K=K, c2w=c2w)
+            o3d.io.write_point_cloud(os.path.join(dir_name, f'point_cloud_{i:03d}.ply'), points_pcd)
+
 
         img_pred_ = (img_pred * 255).astype(np.uint8)
         imgs += [img_pred_]
