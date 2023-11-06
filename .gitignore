@@ -5,3 +5,4 @@ configs/
 data/
 results/
 /test_code
+logs/

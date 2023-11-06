@@ -20,16 +20,16 @@ import json
 def get_opts():
     parser = ArgumentParser()
     parser.add_argument('--root_dir', type=str,
-                        default='./data/nerf_synthetic/lego',
+                        default='./data/my_airplane_data/airplane',
                         help='root directory of dataset')
-    parser.add_argument('--dataset_name', type=str, default='blender',
+    parser.add_argument('--dataset_name', type=str, default='llff',
                         choices=['blender', 'llff'],
                         help='which dataset to validate')
-    parser.add_argument('--scene_name', type=str, default='test',
+    parser.add_argument('--scene_name', type=str, default='airplane',
                         help='scene name, used as output folder name')
     parser.add_argument('--split', type=str, default='test',
                         help='test or test_train')
-    parser.add_argument('--img_wh', nargs="+", type=int, default=[800, 800],
+    parser.add_argument('--img_wh', nargs="+", type=int, default=[960, 544],
                         help='resolution (img_w, img_h) of the image')
     parser.add_argument('--spheric_poses', default=False, action="store_true",
                         help='whether images are taken in spheric poses (for llff)')
@@ -47,7 +47,7 @@ def get_opts():
     parser.add_argument('--chunk', type=int, default=32*1024*4,
                         help='chunk size to split the input to avoid OOM')
 
-    parser.add_argument('--ckpt_path', type=str, default='./ckpts/exp/model-epoch=01-val/psnr=29.52.ckpt',
+    parser.add_argument('--ckpt_path', type=str, default='./ckpts/airplane/model-epoch=01-val/psnr=27.16.ckpt',
                         help='pretrained checkpoint path to load')
 
     parser.add_argument('--save_depth', default=True, action="store_true",
@@ -151,21 +151,21 @@ if __name__ == "__main__":
                 with open(os.path.join(dir_name, f'depth_{i:03d}'), 'wb') as f:
                     f.write(depth_pred.tobytes())
 
-        if args.save_point_cloud:
-            # 获取相机内外参数
-            with open(os.path.join(args.root_dir,
-                                   f"transforms_{args.split}.json"), 'r') as f:
-                meta = json.load(f)
-            focal = 0.5 * w / np.tan(0.5 * meta['camera_angle_x'])  # original focal length
-            K = np.array([
-                [focal, 0, 0.5 * w],
-                [0, focal, 0.5 * h],
-                [0, 0, 1]
-            ])
-            c2w = np.array(meta['frames'][0]['transform_matrix'])
-            depth_pred = results[f'depth_{typ}'].view(h, w).cpu().numpy()
-            points_pcd = depth_image_to_point_cloud(rgb=img_pred, depth=depth_pred, K=K, c2w=c2w)
-            o3d.io.write_point_cloud(os.path.join(dir_name, f'point_cloud_{i:03d}.ply'), points_pcd)
+        # if args.save_point_cloud:
+        #     # 获取相机内外参数
+        #     with open(os.path.join(args.root_dir,
+        #                            f"transforms_{args.split}.json"), 'r') as f:
+        #         meta = json.load(f)
+        #     focal = 0.5 * w / np.tan(0.5 * meta['camera_angle_x'])  # original focal length
+        #     K = np.array([
+        #         [focal, 0, 0.5 * w],
+        #         [0, focal, 0.5 * h],
+        #         [0, 0, 1]
+        #     ])
+        #     c2w = np.array(meta['frames'][0]['transform_matrix'])
+        #     depth_pred = results[f'depth_{typ}'].view(h, w).cpu().numpy()
+        #     points_pcd = depth_image_to_point_cloud(rgb=img_pred, depth=depth_pred, K=K, c2w=c2w)
+        #     o3d.io.write_point_cloud(os.path.join(dir_name, f'point_cloud_{i:03d}.ply'), points_pcd)
 
 
         img_pred_ = (img_pred * 255).astype(np.uint8)

@@ -138,10 +138,23 @@ def test_depth():
     o3d.visualization.draw_geometries([points_pcd])
 
 if __name__ == '__main__':
-    ply_file_path = "./results/blender/test/point_cloud_004.ply"
-    point_cloud = o3d.io.read_point_cloud(ply_file_path)
-    o3d.visualization.draw_geometries([point_cloud])
+    # ply_file_path = "./results/blender/test/point_cloud_060.ply"
+    # point_cloud = o3d.io.read_point_cloud(ply_file_path)
+    # o3d.visualization.draw_geometries([point_cloud])
 
+    depth_filename = './results/blender/test/depth_000.pfm'
+    depth_data, scale = read_pfm(depth_filename)
+    # 创建一个画板
+    fig = plt.figure()
+    # 添加子图2：显示深度图
+    min_depth = np.min(depth_data)
+    max_depth = np.max(depth_data)
+    # 将深度图像归一化到 [0, 1]
+    normalized_depth = (depth_data - min_depth) / (max_depth - min_depth)
+    ax2 = fig.add_subplot(111)
+    ax2.imshow(normalized_depth,  cmap='viridis')
+    ax2.set_title('Depth Map')
+    plt.show()
 
 
 

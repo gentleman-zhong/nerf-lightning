@@ -4,12 +4,12 @@ def get_opts():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--root_dir', type=str,
-                        default='./data/nerf_synthetic/lego',
+                        default='./data/my_airplane_data/airplane',
                         help='root directory of dataset')
-    parser.add_argument('--dataset_name', type=str, default='blender',
+    parser.add_argument('--dataset_name', type=str, default='llff',
                         choices=['blender', 'llff'],
                         help='which dataset to train/val')
-    parser.add_argument('--img_wh', nargs="+", type=int, default=[800, 800],
+    parser.add_argument('--img_wh', nargs="+", type=int, default=[960, 544],
                         help='resolution (img_w, img_h) of the image')
     parser.add_argument('--spheric_poses', default=False, action="store_true",
                         help='whether images are taken in spheric poses (for llff)')
@@ -74,7 +74,7 @@ def get_opts():
                         help='exponent for polynomial learning rate decay')
     ###########################
 
-    parser.add_argument('--exp_name', type=str, default='exp',
+    parser.add_argument('--exp_name', type=str, default='airplane',
                         help='experiment name')
 
     return parser.parse_args()

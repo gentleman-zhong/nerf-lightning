@@ -74,6 +74,7 @@ class NeRFLightningModule(LightningModule):
         kwargs = {'root_dir': self.hparams.root_dir,
                   'img_wh': tuple(self.hparams.img_wh)}
         if self.hparams.dataset_name == 'llff':
+            # 数据是不是以球姿态拍的
             kwargs['spheric_poses'] = self.hparams.spheric_poses
             kwargs['val_num'] = self.hparams.num_gpus
         self.train_dataset = dataset(split='train', **kwargs)

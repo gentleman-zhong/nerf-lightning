@@ -196,9 +196,12 @@ class LLFFDataset(Dataset):
             R = im.qvec2rotmat()
             t = im.tvec.reshape(3, 1)
             w2c_mats += [np.concatenate([np.concatenate([R, t], 1), bottom], 0)]
+        #     获取转换矩阵
         w2c_mats = np.stack(w2c_mats, 0)
+        # 相机姿态信息
         poses = np.linalg.inv(w2c_mats)[:, :3] # (N_images, 3, 4) cam2world matrices
-        
+
+        # 计算每个相机视角的深度范围，以便后续的渲染过程中可以根据深度范围选择需要渲染的点云部分
         # read bounds
         self.bounds = np.zeros((len(poses), 2)) # (N_images, 2)
         pts3d = read_points3d_binary(os.path.join(self.root_dir, 'sparse/0/points3D.bin'))
@@ -284,6 +287,7 @@ class LLFFDataset(Dataset):
         else: # for testing, create a parametric rendering path
             if self.split.endswith('train'): # test on training set
                 self.poses_test = self.poses
+            # 生成测试姿态
             elif not self.spheric_poses:
                 focus_depth = 3.5 # hardcoded, this is numerically close to the formula
                                   # given in the original repo. Mathematically if near=1
