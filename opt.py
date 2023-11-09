@@ -4,12 +4,18 @@ def get_opts():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--root_dir', type=str,
-                        default='./data/my_airplane_data/airplane',
+                        default='./data/nerf_synthetic/lego',
                         help='root directory of dataset')
-    parser.add_argument('--dataset_name', type=str, default='llff',
+    parser.add_argument('--dataset_name', type=str, default='blender',
                         choices=['blender', 'llff'],
                         help='which dataset to train/val')
-    parser.add_argument('--img_wh', nargs="+", type=int, default=[960, 544],
+
+    # for blender
+    parser.add_argument('--data_perturb', nargs="+", type=str, default=["color"],
+                        help='''what perturbation to add to data.
+                                Available choices: [], ["color"], ["occ"] or ["color", "occ"]
+                             ''')
+    parser.add_argument('--img_wh', nargs="+", type=int, default=[800, 800],
                         help='resolution (img_w, img_h) of the image')
     parser.add_argument('--spheric_poses', default=False, action="store_true",
                         help='whether images are taken in spheric poses (for llff)')
@@ -28,17 +34,34 @@ def get_opts():
                         help='factor to perturb depth sampling points')
     parser.add_argument('--noise_std', type=float, default=1.0,
                         help='std dev of noise added to regularize sigma')
-        
+
+    # NeRF-W parameters
+    parser.add_argument('--N_vocab', type=int, default=100,
+                        help='''number of vocabulary (number of images) 
+                                in the dataset for nn.Embedding''')
+    parser.add_argument('--encode_a', default=True, action="store_true",
+                        help='whether to encode appearance (NeRF-A)')
+    parser.add_argument('--N_a', type=int, default=48,
+                        help='number of embeddings for appearance')
+    parser.add_argument('--encode_t', default=False, action="store_true",
+                        help='whether to encode transient object (NeRF-U)')
+    parser.add_argument('--N_tau', type=int, default=16,
+                        help='number of embeddings for transient objects')
+    parser.add_argument('--beta_min', type=float, default=0.1,
+                        help='minimum color variance for each ray')
+
+
+
     parser.add_argument('--batch_size', type=int, default=1024,
                         help='batch size')
     parser.add_argument('--chunk', type=int, default=32*1024,
                         help='chunk size to split the input to avoid OOM')
-    parser.add_argument('--num_epochs', type=int, default=2,
+    parser.add_argument('--num_epochs', type=int, default=5,
                         help='number of training epochs')
     parser.add_argument('--num_gpus', type=int, default=1,
                         help='number of gpus')
 
-    parser.add_argument('--ckpt_path', type=str, default=None,
+    parser.add_argument('--ckpt_path', type=str, default='./ckpts/nerf-w/model-epoch=00-val/psnr=10.43.ckpt',
                         help='pretrained checkpoint to load (including optimizers, etc)')
     parser.add_argument('--prefixes_to_ignore', nargs='+', type=str, default=['loss'],
                         help='the prefixes to ignore in the checkpoint state dict')
@@ -74,7 +97,7 @@ def get_opts():
                         help='exponent for polynomial learning rate decay')
     ###########################
 
-    parser.add_argument('--exp_name', type=str, default='airplane',
+    parser.add_argument('--exp_name', type=str, default='nerf-w',
                         help='experiment name')
 
     return parser.parse_args()

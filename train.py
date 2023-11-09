@@ -21,32 +21,65 @@ import opt
 
 
 class NeRFLightningModule(LightningModule):
+    # self.models_to_train存放了初始化待训练外观编码和动态编码
+    # self.models放了粗细两个模型
+    # self.loss放了损失函数
+    # self.embeddings放了初始化的采样点和射线位置编码模型
     def __init__(self, hparams):
         super().__init__()
         self.save_hyperparameters(hparams)
-        self.example_input_array = torch.Tensor(640000, 8)
+        # self.example_input_array = torch.Tensor(522240, 8)
         self.val_outputs = {'val_loss': [], 'val_psnr': []}
 
 
-        self.loss = loss_dict['color'](coef=1)
+        # self.loss = loss_dict['color'](coef=1)
+        # nerf-w
+        self.loss = loss_dict['nerfw'](coef=1)
+        self.models_to_train = []
 
         self.embedding_xyz = Embedding(hparams.N_emb_xyz)
         self.embedding_dir = Embedding(hparams.N_emb_dir)
         self.embeddings = {'xyz': self.embedding_xyz,
                            'dir': self.embedding_dir}
 
-        self.nerf_coarse = NeRF(in_channels_xyz=6 * hparams.N_emb_xyz + 3,
-                                in_channels_dir=6 * hparams.N_emb_dir + 3)
+        if hparams.encode_a:
+            # N_vocab------number of images in the dataset for nn.Embedding
+            # N_a----------number of embeddings for appearance
+            self.embedding_a = torch.nn.Embedding(hparams.N_vocab, hparams.N_a)
+            self.embeddings['a'] = self.embedding_a
+            self.models_to_train += [self.embedding_a]
+        if hparams.encode_t:
+            self.embedding_t = torch.nn.Embedding(hparams.N_vocab, hparams.N_tau)
+            self.embeddings['t'] = self.embedding_t
+            self.models_to_train += [self.embedding_t]
+
+        self.nerf_coarse = NeRF('coarse',
+                                in_channels_xyz=6 * hparams.N_emb_xyz + 3,
+                                in_channels_dir=6 * hparams.N_emb_dir + 3,
+                                encode_appearance=hparams.encode_a,
+                                in_channels_a=hparams.N_a,
+                                encode_transient=hparams.encode_t,
+                                in_channels_t=hparams.N_tau,
+                                # 每条光线的最小颜色方差
+                                beta_min=hparams.beta_min)
         self.models = {'coarse': self.nerf_coarse}
-        load_ckpt(self.nerf_coarse, hparams.weight_path, 'nerf_coarse')
+        # load_ckpt(self.nerf_coarse, hparams.weight_path, 'nerf_coarse')
 
         if hparams.N_importance > 0:
-            self.nerf_fine = NeRF(in_channels_xyz=6 * hparams.N_emb_xyz + 3,
-                                  in_channels_dir=6 * hparams.N_emb_dir + 3)
+            self.nerf_fine = NeRF('fine',
+                                  in_channels_xyz=6*hparams.N_emb_xyz+3,
+                                  in_channels_dir=6*hparams.N_emb_dir+3,
+                                  encode_appearance=hparams.encode_a,
+                                  in_channels_a=hparams.N_a,
+                                  encode_transient=hparams.encode_t,
+                                  in_channels_t=hparams.N_tau,
+                                  # 每条光线的最小颜色方差
+                                  beta_min=hparams.beta_min)
             self.models['fine'] = self.nerf_fine
-            load_ckpt(self.nerf_fine, hparams.weight_path, 'nerf_fine')
+            # load_ckpt(self.nerf_fine, hparams.weight_path, 'nerf_fine')
+            self.models_to_train += [self.models]
 
-    def forward(self, rays):
+    def forward(self, rays, ts):
         num_rays = rays.shape[0]
         results = defaultdict(list)
         for i in range(0, num_rays, self.hparams.chunk):
@@ -54,6 +87,7 @@ class NeRFLightningModule(LightningModule):
                 render_rays(self.models,
                             self.embeddings,
                             rays[i:i + self.hparams.chunk],
+                            ts[i:i + self.hparams.chunk],
                             self.hparams.N_samples,
                             self.hparams.use_disp,
                             self.hparams.perturb,
@@ -77,6 +111,8 @@ class NeRFLightningModule(LightningModule):
             # 数据是不是以球姿态拍的
             kwargs['spheric_poses'] = self.hparams.spheric_poses
             kwargs['val_num'] = self.hparams.num_gpus
+        elif self.hparams.dataset_name == 'blender':
+            kwargs['perturbation'] = self.hparams.data_perturb
         self.train_dataset = dataset(split='train', **kwargs)
         self.val_dataset = dataset(split='val', **kwargs)
 
@@ -95,40 +131,58 @@ class NeRFLightningModule(LightningModule):
                           pin_memory=True)
 
     def configure_optimizers(self):
-        self.optimizer = get_optimizer(self.hparams, self.models)
+        # self.optimizer = get_optimizer(self.hparams, self.models)
+        self.optimizer = get_optimizer(self.hparams, self.models_to_train)
         scheduler = get_scheduler(self.hparams, self.optimizer)
         return [self.optimizer], [scheduler]
 
     def training_step(self, batch, batch_nb):
-        rays, rgbs = batch['rays'], batch['rgbs']
-        results = self(rays)
-        loss = self.loss(results, rgbs)
+        # nerf-w
+        # rays, rgbs = batch['rays'], batch['rgbs']
+        # results = self(rays)
+        # loss = self.loss(results, rgbs)
+        rays, rgbs, ts = batch['rays'], batch['rgbs'], batch['ts']
+        results = self(rays, ts)
+        loss_d = self.loss(results, rgbs)
+        loss = sum(l for l in loss_d.values())
 
         with torch.no_grad():
             typ = 'fine' if 'rgb_fine' in results else 'coarse'
             psnr_ = psnr(results[f'rgb_{typ}'], rgbs)
 
         log = {'lr': get_learning_rate(self.optimizer), 'train/loss': loss, 'train/psnr': psnr_}
+        # nerf-w
+        for k, v in loss_d.items():
+            log[f'train/{k}'] = v
+
         self.log_dict(log, on_epoch=True, prog_bar=True)
 
         return loss
 
     def validation_step(self, batch, batch_nb):
-        rays, rgbs = batch['rays'], batch['rgbs']
-        rays = rays.squeeze()  # (H*W, 3)
-        rgbs = rgbs.squeeze()  # (H*W, 3)
-        results = self(rays)
-        loss = self.loss(results, rgbs)
+        # rays, rgbs = batch['rays'], batch['rgbs']
+        # rays = rays.squeeze()  # (H*W, 3)
+        # rgbs = rgbs.squeeze()  # (H*W, 3)
+        # results = self(rays)
+        # loss = self.loss(results, rgbs)
+        rays, rgbs, ts = batch['rays'], batch['rgbs'], batch['ts']
+        rays = rays.squeeze() # (H*W, 3)
+        rgbs = rgbs.squeeze() # (H*W, 3)
+        ts = ts.squeeze() # (H*W)
+        results = self(rays, ts)
+        loss_d = self.loss(results, rgbs)
+        loss = sum(l for l in loss_d.values())
+
         typ = 'fine' if 'rgb_fine' in results else 'coarse'
         # 在第一个批次时，可视化模型的输出，包括预测的图像 (img)、GT 图像 (img_gt) 和深度图 (depth)。
-        if batch_nb == 0:
-            W, H = self.hparams.img_wh
-            img = results[f'rgb_{typ}'].view(H, W, 3).permute(2, 0, 1).cpu()  # (3, H, W)
-            img_gt = rgbs.view(H, W, 3).permute(2, 0, 1).cpu()  # (3, H, W)
-            depth = visualize_depth(results[f'depth_{typ}'].view(H, W))  # (3, H, W)
-            stack = torch.stack([img_gt, img, depth])  # (3, 3, H, W)
-            self.logger.experiment.add_images('val/GT_pred_depth',
-                                              stack, self.global_step)
+        # if batch_nb == 0:
+        #     W, H = self.hparams.img_wh
+        #     img = results[f'rgb_{typ}'].view(H, W, 3).permute(2, 0, 1).cpu()  # (3, H, W)
+        #     img_gt = rgbs.view(H, W, 3).permute(2, 0, 1).cpu()  # (3, H, W)
+        #     depth = visualize_depth(results[f'depth_{typ}'].view(H, W))  # (3, H, W)
+        #     stack = torch.stack([img_gt, img, depth])  # (3, 3, H, W)
+        #     self.logger.experiment.add_images('val/GT_pred_depth',
+        #                                       stack, self.global_step)
 
         psnr_ = psnr(results[f'rgb_{typ}'], rgbs)
         log = {'val_loss': loss, 'val_psnr': psnr_}

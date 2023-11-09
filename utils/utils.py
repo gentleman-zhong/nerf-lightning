@@ -36,7 +36,7 @@ def load_ckpt(model, ckpt_path, model_name='model', prefixes_to_ignore=[]):
     model_dict = model.state_dict()
     checkpoint_ = extract_model_state_dict(ckpt_path, model_name, prefixes_to_ignore)
     model_dict.update(checkpoint_)
-    model.load_state_dict(model_dict)
+    model.load_state_dict(model_dict, strict=False)
 
 
 # 获得参数
